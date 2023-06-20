@@ -10,17 +10,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.net.Socket
 
 class MainActivity : AppCompatActivity() {
-
+    private lateinit var buttonConnect: Button
     private var connection: Socket? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val buttonConnect: Button = findViewById(R.id.buttonConnect)
+        buttonConnect = findViewById(R.id.buttonConnect)
         val buttonPort1: Button = findViewById(R.id.buttonPort1)
         val buttonPort2: Button = findViewById(R.id.buttonPort2)
         val textViewConnect: TextView = findViewById(R.id.textViewConnectStatus)
@@ -31,10 +32,16 @@ class MainActivity : AppCompatActivity() {
             CoroutineScope(Dispatchers.IO).launch {
                 if (buttonConnect.text == "Подключиться") {
                     if (authentication(getConnection())) {
-                        checkOutPorts(getConnection())
                         withContext(Dispatchers.Main) {
                             textViewConnect.text = "Подключено"
                             buttonConnect.text = "Отключиться"
+                        }
+
+                        runBlocking {
+                            while (true){
+                                checkOutPorts(getConnection())
+                                delay(100)
+                            }
                         }
                     }
                 } else {
@@ -67,7 +74,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun authentication (connect: Socket) : Boolean = coroutineScope {
+    private suspend fun authentication(connect: Socket): Boolean = coroutineScope {
         var isAuth = false
         if (connect.isConnected && !connect.isClosed) {
             val byteArray = byteArrayOf(0x04, 0x02, 0x00, 0x00, 0x31, 0x32, 0x33, 0x34)
@@ -91,60 +98,60 @@ class MainActivity : AppCompatActivity() {
         return@coroutineScope isAuth
     }
 
-    private suspend fun send(connect: Socket, _bytes: ByteArray){
+    private suspend fun send(connect: Socket, _bytes: ByteArray) {
         withContext(Dispatchers.IO) {
+            delay(25)
             connect.getOutputStream().write(_bytes)
             connect.getOutputStream().flush()
-            delay(25)
         }
     }
 
-    private suspend fun read(connect: Socket): ByteArray{
+    private suspend fun read(connect: Socket): ByteArray {
         val buffer = ByteArray(8)
         withContext(Dispatchers.IO) {
-            connect.getInputStream().read(buffer)
             delay(25)
+            connect.getInputStream().read(buffer)
         }
         return buffer
     }
 
-    private fun openPort(connect: Socket, port: Int){
-        val byteArray = if (port== 1)
+    private suspend fun openPort(connect: Socket, port: Int) {
+        val byteArray = if (port == 1)
             byteArrayOf(0x04, 0x0E, 0x0a, 0xFF.toByte(), 0x00, 0x00, 0x00, 0x00)
         else
             byteArrayOf(0x04, 0x0E, 0x0b, 0xFF.toByte(), 0x00, 0x00, 0x00, 0x00)
-        CoroutineScope(Dispatchers.IO).launch {
+
+        withContext(Dispatchers.Default) {
             send(connect, byteArray)
-            checkOutPorts(connect)
-            }
         }
+    }
 
 
-    private fun closePort(connect: Socket, port: Int){
-        val byteArray = if (port== 1)
-            byteArrayOf(0x04, 0x0E, 0x0a, 0xFF.toByte(), 0x00, 0x00, 0x00, 0x00)
+    private suspend fun closePort(connect: Socket, port: Int) {
+        val byteArray = if (port == 1)
+            byteArrayOf(0x04, 0x0E, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00)
         else
-            byteArrayOf(0x04, 0x0E, 0x0b, 0xFF.toByte(), 0x00, 0x00, 0x00, 0x00)
-        CoroutineScope(Dispatchers.IO).launch {
+            byteArrayOf(0x04, 0x0E, 0x0b, 0x00, 0x00, 0x00, 0x00, 0x00)
+
+        withContext(Dispatchers.Default) {
             send(connect, byteArray)
-            checkOutPorts(connect)
         }
     }
 
     private fun getConnection(): Socket {
         var isAlive = false
         if (connection != null)
-            if (connection!!.isConnected && !connection!!.isClosed){
+            if (connection!!.isConnected && !connection!!.isClosed) {
                 isAlive = true
             }
 
-        return if (isAlive){
+        return if (isAlive) {
             connection as Socket
-        }else{
+        } else {
             var isConnected = false
             while (!isConnected) {
                 try {
-                    connection = Socket("192.168.0.123", 30003)
+                    connection = Socket("192.168.0.160", 30003)
                     isConnected = true
                 } catch (ex: Exception) {
                     Log.d("[SOCKET CONNECTION ERROR]", ex.message.toString())
@@ -155,33 +162,34 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun checkOutPorts(connect: Socket){
+    private suspend fun checkOutPorts(connect: Socket) {
         val textViewPort1: TextView = findViewById(R.id.textViewPort1Status)
         val textViewPort2: TextView = findViewById(R.id.textViewPort2Status)
-
         val byteArray = byteArrayOf(0x04, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
-        CoroutineScope(Dispatchers.IO).launch {
-            send(connect, byteArray)
-            val result = read(connect)
-            if (result.size == 8)
-                when (result[2]){
-                    0x00.toByte() ->{
-                        textViewPort1.text = "Закрыт"
-                        textViewPort2.text = "Закрыт"
-                    }
-                    0x01.toByte() -> {
-                        textViewPort1.text = "Открыт"
-                        textViewPort2.text = "Закрыт"
-                    }
-                    0x02.toByte() -> {
-                        textViewPort1.text = "Закрыт"
-                        textViewPort2.text = "Открыт"
-                    }
-                    0x03.toByte() ->{
-                        textViewPort1.text = "Открыт"
-                        textViewPort2.text = "Открыт"
-                    }
+
+        send(connect, byteArray)
+        val result = read(connect)
+        if (result.size == 8)
+            if (result[2] == 0x00.toByte()) {
+                withContext(Dispatchers.Main) {
+                    textViewPort1.text = "Закрыт"
+                    textViewPort2.text = "Закрыт"
                 }
-        }
+            } else if (result[2] == 0x01.toByte()) {
+                withContext(Dispatchers.Main) {
+                    textViewPort1.text = "Открыт"
+                    textViewPort2.text = "Закрыт"
+                }
+            } else if (result[2] == 0x02.toByte()) {
+                withContext(Dispatchers.Main) {
+                    textViewPort1.text = "Закрыт"
+                    textViewPort2.text = "Открыт"
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    textViewPort1.text = "Открыт"
+                    textViewPort2.text = "Открыт"
+                }
+            }
     }
 }
