@@ -17,6 +17,25 @@ import java.net.Socket
 class MainActivity : AppCompatActivity() {
     private lateinit var buttonConnect: Button
     private var connection: Socket? = null
+    private var port1: Boolean = false
+        set(value) {
+            if (value) {
+                CoroutineScope(Dispatchers.Default).launch { openPort(getConnection(), 1) }
+            } else {
+                CoroutineScope(Dispatchers.Default).launch { closePort(getConnection(), 1) }
+            }
+            field = value
+        }
+    private var port2: Boolean = false
+        set(value) {
+            if (value) {
+                CoroutineScope(Dispatchers.Default).launch { openPort(getConnection(), 2) }
+            } else {
+                CoroutineScope(Dispatchers.Default).launch { closePort(getConnection(), 2) }
+            }
+            field = value
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -37,8 +56,8 @@ class MainActivity : AppCompatActivity() {
                             buttonConnect.text = "Отключиться"
                         }
 
-                        runBlocking {
-                            while (true){
+                        CoroutineScope(Dispatchers.Default).launch {
+                            while (true) {
                                 checkOutPorts(getConnection())
                                 delay(100)
                             }
@@ -56,21 +75,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
         buttonPort1.setOnClickListener {
-            CoroutineScope(Dispatchers.IO).launch {
-                if (textViewPort1.text == "Закрыт")
-                    openPort(getConnection(), 1)
-                else
-                    closePort(getConnection(), 1)
-            }
+            port1 = textViewPort1.text == "Закрыт"
         }
 
         buttonPort2.setOnClickListener {
-            CoroutineScope(Dispatchers.IO).launch {
-                if (textViewPort2.text == "Закрыт")
-                    openPort(getConnection(), 2)
-                else
-                    closePort(getConnection(), 2)
-            }
+            port2 = textViewPort2.text == "Закрыт"
         }
     }
 
@@ -117,24 +126,26 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun openPort(connect: Socket, port: Int) {
         val byteArray = if (port == 1)
-            byteArrayOf(0x04, 0x0E, 0x0a, 0xFF.toByte(), 0x00, 0x00, 0x00, 0x00)
+            byteArrayOf(0x04, 0x0E, 0x0A, 0xFF.toByte(), 0x00, 0x00, 0x00, 0x00)
         else
-            byteArrayOf(0x04, 0x0E, 0x0b, 0xFF.toByte(), 0x00, 0x00, 0x00, 0x00)
+            byteArrayOf(0x04, 0x0E, 0x0B, 0xFF.toByte(), 0x00, 0x00, 0x00, 0x00)
 
         withContext(Dispatchers.Default) {
             send(connect, byteArray)
+            read(connect)
         }
     }
 
 
     private suspend fun closePort(connect: Socket, port: Int) {
         val byteArray = if (port == 1)
-            byteArrayOf(0x04, 0x0E, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00)
+            byteArrayOf(0x04, 0x0E, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00)
         else
-            byteArrayOf(0x04, 0x0E, 0x0b, 0x00, 0x00, 0x00, 0x00, 0x00)
+            byteArrayOf(0x04, 0x0E, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00)
 
         withContext(Dispatchers.Default) {
             send(connect, byteArray)
+            read(connect)
         }
     }
 
@@ -170,26 +181,28 @@ class MainActivity : AppCompatActivity() {
         send(connect, byteArray)
         val result = read(connect)
         if (result.size == 8)
-            if (result[2] == 0x00.toByte()) {
-                withContext(Dispatchers.Main) {
-                    textViewPort1.text = "Закрыт"
-                    textViewPort2.text = "Закрыт"
-                }
-            } else if (result[2] == 0x01.toByte()) {
-                withContext(Dispatchers.Main) {
-                    textViewPort1.text = "Открыт"
-                    textViewPort2.text = "Закрыт"
-                }
-            } else if (result[2] == 0x02.toByte()) {
-                withContext(Dispatchers.Main) {
-                    textViewPort1.text = "Закрыт"
-                    textViewPort2.text = "Открыт"
-                }
-            } else {
-                withContext(Dispatchers.Main) {
-                    textViewPort1.text = "Открыт"
-                    textViewPort2.text = "Открыт"
-                }
-            }
+            if (result[0] == 0x06.toByte())
+                if (result[1] == 0x12.toByte())
+                    if (result[2] == 0x00.toByte()) {
+                        withContext(Dispatchers.Main) {
+                            textViewPort1.text = "Закрыт"
+                            textViewPort2.text = "Закрыт"
+                        }
+                    } else if (result[2] == 0x01.toByte()) {
+                        withContext(Dispatchers.Main) {
+                            textViewPort1.text = "Открыт"
+                            textViewPort2.text = "Закрыт"
+                        }
+                    } else if (result[2] == 0x02.toByte()) {
+                        withContext(Dispatchers.Main) {
+                            textViewPort1.text = "Закрыт"
+                            textViewPort2.text = "Открыт"
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            textViewPort1.text = "Открыт"
+                            textViewPort2.text = "Открыт"
+                        }
+                    }
     }
 }
