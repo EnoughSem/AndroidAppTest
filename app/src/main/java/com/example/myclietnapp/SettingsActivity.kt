@@ -40,8 +40,6 @@ class SettingsActivity : AppCompatActivity() {
             recordSettings()
             backToMain()
         }
-
-
     }
 
 

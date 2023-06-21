@@ -59,8 +59,10 @@ class MainActivity : AppCompatActivity() {
     private var connectionEnabled = false
 
     override fun onPause() {
+        CoroutineScope(Dispatchers.Default).launch {
+            closeConnection()
+        }
         super.onPause()
-        connection!!.close()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -104,10 +106,7 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 } else if (buttonConnect.text == "Отключиться") {
-                    connectionEnabled = false
-                    withContext(Dispatchers.IO) {
-                        getConnection().close()
-                    }
+                    closeConnection()
                     withContext(Dispatchers.Main) {
                         textViewConnect.text = "Отключено"
                         buttonConnect.text = "Подключиться"
@@ -135,6 +134,13 @@ class MainActivity : AppCompatActivity() {
 
         buttonSettings.setOnClickListener {
             settings()
+        }
+    }
+
+    private suspend fun closeConnection(){
+        connectionEnabled = false
+        withContext(Dispatchers.IO) {
+            getConnection().close()
         }
     }
 
@@ -226,6 +232,14 @@ class MainActivity : AppCompatActivity() {
             connection as Socket
         } else {
             var isConnected = false
+
+            try {
+                connection = Socket(ipAddress, ipPort)
+                isConnected = true
+            } catch (ex: Exception) {
+                Log.d("[SOCKET CONNECTION ERROR]", ex.message.toString())
+            }
+
             while (connectionEnabled) {
                 if (isConnected) break
 
