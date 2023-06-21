@@ -1,5 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">MyClietnApp</string>
     <string name="connection">Подключение</string>
     <string name="status">Состояние</string>
     <string name="settings">Настройки</string>

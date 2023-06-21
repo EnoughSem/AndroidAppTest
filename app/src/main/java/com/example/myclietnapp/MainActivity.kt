@@ -27,11 +27,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textViewPort2: TextView
     private lateinit var textViewStatusInPort: TextView
 
-    private val SETTINGS_FILE_NAME = "Settings"
-    private val SETTINGS_IP = "IpAdress"
-    private val SETTINGS_PORT = "PortAdress"
+    private val settingsFileName = "Settings"
+    private val settingsIpAddress = "IpAddress"
+    private val settingsPort = "PortAddress"
 
-    private lateinit var ipAdress: String
+    private lateinit var ipAddress: String
     private var ipPort: Int = 30003
 
     private lateinit var settings: SharedPreferences
@@ -56,6 +56,8 @@ class MainActivity : AppCompatActivity() {
             field = value
         }
 
+    private var connectionEnabled = false
+
     override fun onPause() {
         super.onPause()
         connection!!.close()
@@ -65,10 +67,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        settings = getSharedPreferences(SETTINGS_FILE_NAME, Context.MODE_PRIVATE)
+        settings = getSharedPreferences(settingsFileName, Context.MODE_PRIVATE)
 
-        ipAdress = settings.getString(SETTINGS_IP, "192.168.0.123")!!
-        ipPort = settings.getInt(SETTINGS_PORT, 30003)
+        ipAddress = settings.getString(settingsIpAddress, "192.168.0.123")!!
+        ipPort = settings.getInt(settingsPort, 30003)
 
         buttonConnect = findViewById(R.id.buttonConnect)
         buttonPort1 = findViewById(R.id.buttonPort1)
@@ -81,6 +83,7 @@ class MainActivity : AppCompatActivity() {
         buttonConnect.setOnClickListener {
             CoroutineScope(Dispatchers.IO).launch {
                 if (buttonConnect.text == "Подключиться") {
+                    connectionEnabled = true
                     if (authentication(getConnection())) {
                         withContext(Dispatchers.Main) {
                             textViewConnect.text = "Подключено"
@@ -94,15 +97,16 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         CoroutineScope(Dispatchers.Default).launch {
-                            while(true){
+                            while (true) {
                                 checkInPorts(getConnection())
                                 delay(100)
                             }
                         }
                     }
                 } else if (buttonConnect.text == "Отключиться") {
+                    connectionEnabled = false
                     withContext(Dispatchers.IO) {
-                        connection!!.close()
+                        getConnection().close()
                     }
                     withContext(Dispatchers.Main) {
                         textViewConnect.text = "Отключено"
@@ -132,7 +136,6 @@ class MainActivity : AppCompatActivity() {
         buttonSettings.setOnClickListener {
             settings()
         }
-
     }
 
     private suspend fun authentication(connect: Socket): Boolean = coroutineScope {
@@ -160,8 +163,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun send(connect: Socket, _bytes: ByteArray) {
+        delay(25)
+
+        if (!connect.isConnected) return
+        if (connect.isClosed) return
+
         withContext(Dispatchers.IO) {
-            delay(25)
             connect.getOutputStream().write(_bytes)
             connect.getOutputStream().flush()
         }
@@ -169,10 +176,15 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun read(connect: Socket): ByteArray {
         val buffer = ByteArray(8)
+        delay(25)
+
+        if (!connect.isConnected) return buffer
+        if (connect.isClosed) return buffer
+
         withContext(Dispatchers.IO) {
-            delay(25)
             connect.getInputStream().read(buffer)
         }
+
         return buffer
     }
 
@@ -214,9 +226,11 @@ class MainActivity : AppCompatActivity() {
             connection as Socket
         } else {
             var isConnected = false
-            while (!isConnected) {
+            while (connectionEnabled) {
+                if (isConnected) break
+
                 try {
-                    connection = Socket(ipAdress, ipPort)
+                    connection = Socket(ipAddress, ipPort)
                     isConnected = true
                 } catch (ex: Exception) {
                     Log.d("[SOCKET CONNECTION ERROR]", ex.message.toString())
@@ -226,7 +240,6 @@ class MainActivity : AppCompatActivity() {
             connection as Socket
         }
     }
-
 
     private suspend fun checkOutPorts(connect: Socket): Boolean {
         var resultMessage = false
